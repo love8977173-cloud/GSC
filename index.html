@@ -147,6 +147,7 @@
     let currentPage = 1;
     let currentViewMode = 'card';
     const PAGE_SIZE = 12;
+    const BUILD_VERSION = "1790246880";
 
     // 【並行連線節流器】：嚴格限制同時只有 2 個連線在抓圖，徹底排除排隊堵塞
     const MAX_CONCURRENT_DOWNLOADS = 2;
@@ -183,7 +184,6 @@
       const src = img.dataset.src;
       if (!src) return;
 
-      // 如果已經在快取池中，瞬間直出，完全不排隊
       if (loadedImages.has(src)) {
         img.src = src;
         img.classList.remove('img-placeholder');
@@ -223,7 +223,7 @@
       const currentUrl = window.location.href.split('?')[0];
       const ua = navigator.userAgent || navigator.vendor || window.opera;
       if (/android/i.test(ua)) {
-        window.location.href = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
+        window.location.href = "intent://" + window.location.host + window.location.pathname + "#Intent;scheme=https;package=com.android.chrome;end";
       } else {
         if (ua.indexOf("Line") > -1) {
           document.getElementById('lineGuideModal').classList.remove('hidden');
@@ -241,7 +241,7 @@
       try {
         checkLineBrowser();
         initObserver();
-        const res = await fetch('data.json?t=' + Date.now());
+        const res = await fetch('data.json?t=' + BUILD_VERSION);
         allProducts = await res.json();
         filteredProducts = allProducts;
         
@@ -258,7 +258,7 @@
       let closeDate = allProducts[0].close_date || "依公告";
       let subtitle = allProducts[0].subtitle || "熱血現貨與預購專區";
 
-      document.getElementById('pageTitle').innerText = `${brand}預購目錄 ｜ 截止：${closeDate} - 爪哇魯多模型店`;
+      document.getElementById('pageTitle').innerText = brand + "預購目錄 ｜ 截止：" + closeDate + " - 爪哇魯多模型店";
       document.getElementById('headerBrand').innerText = brand;
       document.getElementById('headerCloseDate').innerText = closeDate;
       document.getElementById('headerSubtitle').innerText = subtitle;
@@ -298,8 +298,8 @@
     }
 
     function getImageUrl(item) {
-      const subpath = item.img_subpath || `Default/${item.barcode || 'NO_BARCODE'}.webp`;
-      return `./images/${subpath}`;
+      const subpath = item.img_subpath || ("Default/" + (item.barcode || 'NO_BARCODE') + ".webp");
+      return "./images/" + subpath + "?v=" + BUILD_VERSION;
     }
 
     function handleImageError(img, item) {
@@ -307,28 +307,30 @@
       const brand = item.brand || 'Default';
       if (!img.dataset.triedFallback) {
         img.dataset.triedFallback = "true";
-        img.src = `./images/${brand}/${barcode}.jpg`;
+        img.src = "./images/" + brand + "/" + barcode + ".jpg?v=" + BUILD_VERSION;
       } else {
         img.onerror = null;
-        img.src = `https://placehold.co/300x300/1e293b/94a3b8?text=${barcode}`;
+        img.src = "https://placehold.co/300x300/1e293b/94a3b8?text=" + barcode;
       }
     }
 
     function createCard(item) {
       const finalImg = getImageUrl(item);
       const isCached = loadedImages.has(finalImg);
-      const srcAttr = isCached ? `src="${finalImg}"` : `src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" data-src="${finalImg}"`;
+      const srcAttr = isCached ? ('src="' + finalImg + '"') : ('src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" data-src="' + finalImg + '"');
       const placeholderClass = isCached ? '' : 'img-placeholder';
+      const escapedName = item.name.replace(/'/g, "\'");
+      const escapedJson = JSON.stringify(item).replace(/'/g, "&apos;");
 
       return `
         <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col justify-between shadow text-xs">
           <div>
             <div class="relative w-full card-img-container bg-slate-800/80 overflow-hidden cursor-zoom-in flex items-center justify-center" 
-                 onclick="openModal('${finalImg}', '${item.name.replace(/'/g, "\\'")}')">
-              <img ${srcAttr} data-item-info='${JSON.stringify(item).replace(/'/g, "&apos;")}' alt="${item.name}" 
-                   class="lazy-img ${placeholderClass} w-full h-full object-contain p-1" />
+                 onclick="openModal('` + finalImg + `', '` + escapedName + `')">
+              <img ` + srcAttr + ` data-item-info='` + escapedJson + `' alt="` + item.name + `" 
+                   class="lazy-img ` + placeholderClass + ` w-full h-full object-contain p-1" />
               <span class="absolute top-1 left-1 px-1.5 py-0.5 text-[9px] font-semibold bg-slate-950/80 text-amber-300 rounded backdrop-blur-sm">
-                ${item.brand}
+                ` + item.brand + `
               </span>
               <span class="absolute bottom-1 right-1 px-1 py-0.5 text-[8px] bg-slate-900/70 text-slate-300 rounded">
                 🔍
@@ -337,13 +339,13 @@
             
             <div class="p-1.5 space-y-1">
               <div class="flex items-center justify-between text-[10px]">
-                <span class="text-slate-400 bg-slate-800 px-1 rounded">#${item.id}</span>
-                <span class="font-mono text-amber-400/80 truncate ml-1 text-[10px]">${item.barcode}</span>
+                <span class="text-slate-400 bg-slate-800 px-1 rounded">#` + item.id + `</span>
+                <span class="font-mono text-amber-400/80 truncate ml-1 text-[10px]">` + item.barcode + `</span>
               </div>
-              <h2 class="font-semibold text-slate-100 line-clamp-2 leading-tight min-h-[2rem] text-[11px]" title="${item.name}">${item.name}</h2>
+              <h2 class="font-semibold text-slate-100 line-clamp-2 leading-tight min-h-[2rem] text-[11px]" title="` + item.name + `">` + item.name + `</h2>
               <div class="text-[10px] text-slate-400 flex justify-between pt-0.5 border-t border-slate-800/60">
-                <span>上市: ${item.release_date}</span>
-                <span class="text-rose-400 font-semibold">截止: ${item.close_date}</span>
+                <span>上市: ` + item.release_date + `</span>
+                <span class="text-rose-400 font-semibold">截止: ` + item.close_date + `</span>
               </div>
             </div>
           </div>
@@ -351,10 +353,10 @@
           <div class="p-1.5 pt-0 border-t border-slate-800/80 mt-1 space-y-1">
             <div class="flex items-baseline justify-between pt-0.5">
               <span class="text-[10px] text-slate-400 font-medium">特惠價</span>
-              <span class="text-xs sm:text-sm font-black text-amber-400">NT$ ${item.preorder_price}</span>
+              <span class="text-xs sm:text-sm font-black text-amber-400">NT$ ` + item.preorder_price + `</span>
             </div>
             <div class="grid grid-cols-2 gap-1 pt-0.5">
-              <button onclick="copyOrder('${item.barcode}', '${item.name.replace(/'/g, "\\'")}', ${item.preorder_price})" 
+              <button onclick="copyOrder('` + item.barcode + `', '` + escapedName + `', ` + item.preorder_price + `)" 
                       class="py-1 text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded transition flex items-center justify-center truncate">
                 <span>📋 複製</span>
               </button>
@@ -371,33 +373,35 @@
     function createListItem(item) {
       const finalImg = getImageUrl(item);
       const isCached = loadedImages.has(finalImg);
-      const srcAttr = isCached ? `src="${finalImg}"` : `src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" data-src="${finalImg}"`;
+      const srcAttr = isCached ? ('src="' + finalImg + '"') : ('src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" data-src="' + finalImg + '"');
       const placeholderClass = isCached ? '' : 'img-placeholder';
+      const escapedName = item.name.replace(/'/g, "\'");
+      const escapedJson = JSON.stringify(item).replace(/'/g, "&apos;");
 
       return `
         <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden shadow flex text-xs">
           <div class="w-20 sm:w-28 aspect-square bg-slate-800/80 relative flex-shrink-0 cursor-zoom-in flex items-center justify-center p-1"
-               onclick="openModal('${finalImg}', '${item.name.replace(/'/g, "\\'")}')">
-            <img ${srcAttr} data-item-info='${JSON.stringify(item).replace(/'/g, "&apos;")}' alt="${item.name}" 
-                 class="lazy-img ${placeholderClass} w-full h-full object-contain" />
+               onclick="openModal('` + finalImg + `', '` + escapedName + `')">
+            <img ` + srcAttr + ` data-item-info='` + escapedJson + `' alt="` + item.name + `" 
+                 class="lazy-img ` + placeholderClass + ` w-full h-full object-contain" />
           </div>
           <div class="flex-1 p-2 flex flex-col justify-between">
             <div>
               <div class="flex justify-between items-center text-[10px] text-slate-400">
-                <span class="font-medium text-slate-300">#${item.id} ｜ ${item.brand}</span>
-                <span class="font-mono text-amber-400/90">${item.barcode}</span>
+                <span class="font-medium text-slate-300">#` + item.id + ` ｜ ` + item.brand + `</span>
+                <span class="font-mono text-amber-400/90">` + item.barcode + `</span>
               </div>
-              <h3 class="font-semibold text-slate-100 text-xs mt-0.5 leading-snug line-clamp-2">${item.name}</h3>
-              <p class="text-[10px] text-slate-400 mt-0.5">上市: ${item.release_date} ｜ <span class="text-rose-400">截止: ${item.close_date}</span></p>
+              <h3 class="font-semibold text-slate-100 text-xs mt-0.5 leading-snug line-clamp-2">` + item.name + `</h3>
+              <p class="text-[10px] text-slate-400 mt-0.5">上市: ` + item.release_date + ` ｜ <span class="text-rose-400">截止: ` + item.close_date + `</span></p>
             </div>
             
             <div class="flex items-center justify-between pt-1.5 border-t border-slate-800/80 gap-2 mt-1">
               <div class="flex items-baseline gap-1">
                 <span class="text-[10px] text-slate-400">特惠價</span>
-                <span class="text-sm font-black text-amber-400 font-mono">NT$ ${item.preorder_price}</span>
+                <span class="text-sm font-black text-amber-400 font-mono">NT$ ` + item.preorder_price + `</span>
               </div>
               <div class="flex gap-1.5">
-                <button onclick="copyOrder('${item.barcode}', '${item.name.replace(/'/g, "\\'")}', ${item.preorder_price})" 
+                <button onclick="copyOrder('` + item.barcode + `', '` + escapedName + `', ` + item.preorder_price + `)" 
                         class="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-[10px] flex items-center justify-center">
                   📋 複製
                 </button>
@@ -434,7 +438,6 @@
         }
       });
 
-      // 註冊視口觀察器（精準派工）
       const lazyImages = document.querySelectorAll('.lazy-img[data-src]');
       if (observer) {
         lazyImages.forEach(img => observer.observe(img));
@@ -442,7 +445,7 @@
         lazyImages.forEach(img => queueImageLoad(img));
       }
 
-      document.getElementById('pageInfo').innerText = `第 ${currentPage} / ${totalPages} 頁 (本頁 ${currentBatch.length} 項, 共 ${totalItems} 項)`;
+      document.getElementById('pageInfo').innerText = "第 " + currentPage + " / " + totalPages + " 頁 (本頁 " + currentBatch.length + " 項, 共 " + totalItems + " 項)";
       renderPaginationControls(totalPages);
     }
 
@@ -453,7 +456,7 @@
       const prevBtn = document.createElement('button');
       prevBtn.innerText = "◀ 上一頁";
       prevBtn.disabled = (currentPage === 1);
-      prevBtn.className = `px-2 py-0.5 rounded border border-slate-700 text-[11px] ${currentPage === 1 ? 'opacity-40 cursor-not-allowed' : 'bg-slate-800 hover:bg-amber-500 hover:text-slate-950 transition'}`;
+      prevBtn.className = "px-2 py-0.5 rounded border border-slate-700 text-[11px] " + (currentPage === 1 ? 'opacity-40 cursor-not-allowed' : 'bg-slate-800 hover:bg-amber-500 hover:text-slate-950 transition');
       prevBtn.onclick = () => { 
         if (currentPage > 1) { 
           currentPage--; 
@@ -482,7 +485,7 @@
       const nextBtn = document.createElement('button');
       nextBtn.innerText = "下一頁 ▶";
       nextBtn.disabled = (currentPage === totalPages);
-      nextBtn.className = `px-2 py-0.5 rounded border border-slate-700 text-[11px] ${currentPage === totalPages ? 'opacity-40 cursor-not-allowed' : 'bg-slate-800 hover:bg-amber-500 hover:text-slate-950 transition'}`;
+      nextBtn.className = "px-2 py-0.5 rounded border border-slate-700 text-[11px] " + (currentPage === totalPages ? 'opacity-40 cursor-not-allowed' : 'bg-slate-800 hover:bg-amber-500 hover:text-slate-950 transition');
       nextBtn.onclick = () => { 
         if (currentPage < totalPages) { 
           currentPage++; 
@@ -501,7 +504,7 @@
     });
 
     function copyOrder(bc, name, price) {
-      const text = `【預購登記】[${bc}] ${name} (NT$ ${price})`;
+      const text = "【預購登記】[" + bc + "] " + name + " (NT$ " + price + ")";
       navigator.clipboard.writeText(text).then(() => {
         alert("已成功複製商品下單格式！請至 Facebook 私訊爪哇魯多登記。");
       });
