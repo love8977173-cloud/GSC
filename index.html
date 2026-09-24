@@ -45,6 +45,16 @@
     .img-placeholder {
       background-color: #1e293b;
     }
+    /* 漸進載入微模糊動態效果 */
+    .lqip-preview {
+      filter: blur(1.5px);
+      transform: scale(0.98);
+      transition: filter 0.35s ease-out, transform 0.35s ease-out;
+    }
+    .lqip-loaded {
+      filter: blur(0px);
+      transform: scale(1.0);
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
@@ -74,7 +84,6 @@
           </div>
 
           <div class="flex items-center space-x-1 flex-shrink-0">
-            <!-- PC 端 (md以上) 完全隱藏外部開啟鈕 -->
             <button onclick="openInExternalBrowser()" title="以手機預設瀏覽器開啟" 
                     class="md:hidden px-1.5 py-0.5 bg-slate-800 border border-slate-600 rounded text-[10px] font-semibold text-slate-200 shadow">
               🌐 瀏覽器
@@ -118,7 +127,6 @@
     </div>
   </footer>
 
-  <!-- 外部瀏覽器引導彈窗 -->
   <div id="lineGuideModal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onclick="closeLineGuide()">
     <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-4 text-center shadow-2xl" onclick="event.stopPropagation()">
       <div class="text-2xl mb-1">🧭</div>
@@ -147,13 +155,13 @@
     let currentPage = 1;
     let currentViewMode = 'card';
     const PAGE_SIZE = 12;
-    const BUILD_VERSION = "1790246880";
+    const BUILD_VERSION = "1790247351";
 
-    // 【並行連線節流器】：嚴格限制同時只有 2 個連線在抓圖，徹底排除排隊堵塞
+    // 【並行連線節流器】：2 線程背景抓高清原圖，避免堵塞伺服器
     const MAX_CONCURRENT_DOWNLOADS = 2;
     let activeDownloads = 0;
     const downloadQueue = [];
-    const loadedImages = new Set(); // 本地已載入快取池
+    const loadedHighResImages = new Set(); // 本地高清圖已載入快取池
 
     function processQueue() {
       while (activeDownloads < MAX_CONCURRENT_DOWNLOADS && downloadQueue.length > 0) {
@@ -165,9 +173,10 @@
         const loader = new Image();
         loader.onload = () => {
           img.src = targetSrc;
-          img.classList.remove('img-placeholder');
+          img.classList.remove('lqip-preview');
+          img.classList.add('lqip-loaded');
           img.removeAttribute('data-src');
-          loadedImages.add(targetSrc);
+          loadedHighResImages.add(targetSrc);
           activeDownloads--;
           processQueue();
         };
@@ -184,9 +193,10 @@
       const src = img.dataset.src;
       if (!src) return;
 
-      if (loadedImages.has(src)) {
+      if (loadedHighResImages.has(src)) {
         img.src = src;
-        img.classList.remove('img-placeholder');
+        img.classList.remove('lqip-preview');
+        img.classList.add('lqip-loaded');
         img.removeAttribute('data-src');
         return;
       }
@@ -208,7 +218,7 @@
               observer.unobserve(img);
             }
           });
-        }, { rootMargin: "120px 0px" });
+        }, { rootMargin: "150px 0px" });
       }
     }
 
@@ -297,7 +307,7 @@
       document.body.style.overflow = 'auto';
     }
 
-    function getImageUrl(item) {
+    function getHighResImageUrl(item) {
       const subpath = item.img_subpath || ("Default/" + (item.barcode || 'NO_BARCODE') + ".webp");
       return "./images/" + subpath + "?v=" + BUILD_VERSION;
     }
@@ -315,10 +325,13 @@
     }
 
     function createCard(item) {
-      const finalImg = getImageUrl(item);
-      const isCached = loadedImages.has(finalImg);
-      const srcAttr = isCached ? ('src="' + finalImg + '"') : ('src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" data-src="' + finalImg + '"');
-      const placeholderClass = isCached ? '' : 'img-placeholder';
+      const highResUrl = getHighResImageUrl(item);
+      const isHighResCached = loadedHighResImages.has(highResUrl);
+      
+      // 【0 秒瞬開核心】：若原圖未快取，直接套用內嵌 Base64 微縮圖，不留任何空白
+      const initialSrc = isHighResCached ? highResUrl : (item.thumb_b64 || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E");
+      const dataSrcAttr = isHighResCached ? "" : ('data-src="' + highResUrl + '"');
+      const previewClass = isHighResCached ? "lqip-loaded" : (item.thumb_b64 ? "lqip-preview" : "img-placeholder");
       const escapedName = item.name.replace(/'/g, "\'");
       const escapedJson = JSON.stringify(item).replace(/'/g, "&apos;");
 
@@ -326,9 +339,9 @@
         <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden flex flex-col justify-between shadow text-xs">
           <div>
             <div class="relative w-full card-img-container bg-slate-800/80 overflow-hidden cursor-zoom-in flex items-center justify-center" 
-                 onclick="openModal('` + finalImg + `', '` + escapedName + `')">
-              <img ` + srcAttr + ` data-item-info='` + escapedJson + `' alt="` + item.name + `" 
-                   class="lazy-img ` + placeholderClass + ` w-full h-full object-contain p-1" />
+                 onclick="openModal('` + highResUrl + `', '` + escapedName + `')">
+              <img src="` + initialSrc + `" ` + dataSrcAttr + ` data-item-info='` + escapedJson + `' alt="` + item.name + `" 
+                   class="lazy-img ` + previewClass + ` w-full h-full object-contain p-1" />
               <span class="absolute top-1 left-1 px-1.5 py-0.5 text-[9px] font-semibold bg-slate-950/80 text-amber-300 rounded backdrop-blur-sm">
                 ` + item.brand + `
               </span>
@@ -371,25 +384,26 @@
     }
 
     function createListItem(item) {
-      const finalImg = getImageUrl(item);
-      const isCached = loadedImages.has(finalImg);
-      const srcAttr = isCached ? ('src="' + finalImg + '"') : ('src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" data-src="' + finalImg + '"');
-      const placeholderClass = isCached ? '' : 'img-placeholder';
+      const highResUrl = getHighResImageUrl(item);
+      const isHighResCached = loadedHighResImages.has(highResUrl);
+      const initialSrc = isHighResCached ? highResUrl : (item.thumb_b64 || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E");
+      const dataSrcAttr = isHighResCached ? "" : ('data-src="' + highResUrl + '"');
+      const previewClass = isHighResCached ? "lqip-loaded" : (item.thumb_b64 ? "lqip-preview" : "img-placeholder");
       const escapedName = item.name.replace(/'/g, "\'");
       const escapedJson = JSON.stringify(item).replace(/'/g, "&apos;");
 
       return `
         <div class="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden shadow flex text-xs">
           <div class="w-20 sm:w-28 aspect-square bg-slate-800/80 relative flex-shrink-0 cursor-zoom-in flex items-center justify-center p-1"
-               onclick="openModal('` + finalImg + `', '` + escapedName + `')">
-            <img ` + srcAttr + ` data-item-info='` + escapedJson + `' alt="` + item.name + `" 
-                 class="lazy-img ` + placeholderClass + ` w-full h-full object-contain" />
+               onclick="openModal('` + highResUrl + `', '` + escapedName + `')">
+            <img src="` + initialSrc + `" ` + dataSrcAttr + ` data-item-info='` + escapedJson + `' alt="` + item.name + `" 
+                 class="lazy-img ` + previewClass + ` w-full h-full object-contain" />
           </div>
           <div class="flex-1 p-2 flex flex-col justify-between">
             <div>
               <div class="flex justify-between items-center text-[10px] text-slate-400">
                 <span class="font-medium text-slate-300">#` + item.id + ` ｜ ` + item.brand + `</span>
-                <span class="font-mono text-amber-400/90">` + item.barcode + `</span>
+                <span class="font-mono text-amber-400/90">${item.barcode}</span>
               </div>
               <h3 class="font-semibold text-slate-100 text-xs mt-0.5 leading-snug line-clamp-2">` + item.name + `</h3>
               <p class="text-[10px] text-slate-400 mt-0.5">上市: ` + item.release_date + ` ｜ <span class="text-rose-400">截止: ` + item.close_date + `</span></p>
@@ -438,6 +452,7 @@
         }
       });
 
+      // 註冊滾動觀察器以排入背景下載佇列
       const lazyImages = document.querySelectorAll('.lazy-img[data-src]');
       if (observer) {
         lazyImages.forEach(img => observer.observe(img));
